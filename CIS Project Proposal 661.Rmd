@@ -1,0 +1,84 @@
+---
+title: "Proposal Statistic Model"
+author: "Eliot Martinon"
+date: "2025-01-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+```
+
+```{r}
+df <- read_excel("~/661/Table 1.xlsx", sheet = 1, skip = 3) 
+colnames(df) <- c("Gene_Symbols", "Description", "First_Infestation", "Second_Infestation", "Third_Infestation")
+
+df <- df |>
+  filter(!is.na(Gene_Symbols))
+```
+
+```{r}
+problematic_values <- df |> 
+  filter(str_detect(Third_Infestation, "[^0-9.-]"))  
+
+df <- df |>
+  mutate(
+    First_Infestation = as.numeric(First_Infestation),
+    Second_Infestation = as.numeric(Second_Infestation),
+    Third_Infestation = as.numeric(Third_Infestation)
+  )
+```
+
+```{r}
+df_long <- df |>
+  pivot_longer(cols = c(First_Infestation, Second_Infestation, Third_Infestation),
+               names_to = "Infestation", values_to = "Expression") |>
+  mutate(Infestation = factor(Infestation))  
+```
+
+```{r}
+summary(df_long)
+```
+
+```{r}
+anova_result <- aov(Expression ~ Infestation, data = df_long)
+summary(anova_result)
+```
+
+```{r}
+TukeyHSD(anova_result)
+```
+
+```{r}
+ggplot(df_long, aes(x = Infestation, y = Expression, fill = Infestation)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +  # Boxplot without extreme outliers
+  geom_jitter(width = 0.2, alpha = 0.5) +  # Adds raw data points
+  theme_minimal() +
+  labs(title = "Gene Expression Across Infestation Types",
+       x = "Infestation Type",
+       y = "Gene Expression") +
+  theme(legend.position = "none")
+```
+
+```{r}
+tukey_results <- TukeyHSD(anova_result)$Infestation %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Comparison")
+
+# Plot Mean Differences with 95% Confidence Intervals
+ggplot(tukey_results, aes(x = Comparison, y = diff, ymin = lwr, ymax = upr)) +
+  geom_pointrange() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +  # Reference line at 0
+  theme_minimal() +
+  labs(title = "Tukey HSD: Mean Differences Between Infestations",
+       x = "Comparison",
+       y = "Mean Difference in Expression") +
+  coord_flip()  # Flips the axis for better readability
+```
+
